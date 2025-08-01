@@ -13,7 +13,7 @@ class Config:
     model_name = 'fecg'
  
     batch_size = 64
-    max_epoch = 300
+    max_epoch = 1000
     ckpt = 'ckpt' 
     lr =0.001
     current_w = 'current_w.pth'
