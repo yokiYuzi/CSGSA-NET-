@@ -117,7 +117,7 @@ def main():
         return
 
     # 动态加载模型架构
-    model = getattr(models, config.model_name)(output_size=128)
+    model = getattr(models, config.model_name)(output_size=300)
     model.to(device)
 
     # 加载训练好的最佳权重
