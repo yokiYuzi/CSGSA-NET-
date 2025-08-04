@@ -111,7 +111,7 @@ class FECGDataset(Dataset):
             ecg = ecg[range(2,3), :]
             ecg = NormalizeData1(ecg)
             delayNum = ecg.shape[0]
-            fecgDelayed = self.createDelayRepetition(fecg, delayNum, delay)
+            fecgDelayed = self.createDelayRepetition(ecg, delayNum, delay)
             fecgDelayed = NormalizeData1(fecgDelayed)
             
             # 如果是第一个文件，直接赋值；否则，进行拼接
