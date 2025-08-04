@@ -109,10 +109,10 @@ class FECGDataset(Dataset):
             ecg, fecg = self.readData(i)
             # 保持原有的通道选择和归一化逻辑
             ecg = ecg[range(2,3), :]
-            ecg = NormalizeData(ecg)
+            ecg = NormalizeData1(ecg)
             delayNum = ecg.shape[0]
             fecgDelayed = self.createDelayRepetition(fecg, delayNum, delay)
-            fecgDelayed = NormalizeData(fecgDelayed)
+            fecgDelayed = NormalizeData1(fecgDelayed)
             
             # 如果是第一个文件，直接赋值；否则，进行拼接
             if is_first_file:
