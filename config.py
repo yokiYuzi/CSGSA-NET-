@@ -12,10 +12,10 @@ class Config:
     val_dir = "./ADFECGDB/"
     model_name = 'fecg'
  
-    batch_size = 128
+    batch_size = 256
     max_epoch = 500
     ckpt = 'ckpt' 
-    lr =0.001
+    lr =0.0005
     current_w = 'current_w.pth'
     best_w = 'best_w.pth'
     
