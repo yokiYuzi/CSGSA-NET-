@@ -108,7 +108,7 @@ class FECGDataset(Dataset):
         for i in file_indices:
             ecg, fecg = self.readData(i)
             # 保持原有的通道选择和归一化逻辑
-            ecg = ecg[range(1,3), :]
+            ecg = ecg[range(2,3), :]
             ecg = NormalizeData(ecg)
             delayNum = ecg.shape[0]
             fecgDelayed = self.createDelayRepetition(fecg, delayNum, delay)
