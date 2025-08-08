@@ -16,82 +16,98 @@ from config import config
 # 忽略一些不必要的警告
 import warnings
 warnings.filterwarnings("ignore")
+from clinical_evaluator import (
+    robust_detect_r_peaks,
+    plot_rpeaks,
+    calculate_qrs_performance,
+    calculate_fhr_error
+)
 
 # 设置设备 (GPU or CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-def test(model, test_dataloader):
+SAMPLING_RATE = 200  # 采样率，单位Hz
+def test(model, test_dataloader, model_name, file_name):
     """
-    测试函数，用于评估模型在测试集上的性能
-
-    参数:
-    model (torch.nn.Module): 加载了权重的模型
-    test_dataloader (DataLoader): 测试数据的DataLoader
+    测试函数，用于评估模型在测试集上的性能（包含信号级和临床级指标）
     """
-    # 将模型设置为评估模式
     model.eval()
-
-    # 用于存储所有样本的真实标签和模型预测值
     all_targets = []
     all_outputs = []
 
-    print("开始测试...")
-    # 在测试过程中不计算梯度
+    print("步骤 1/4: 模型推理，获取预测信号...")
     with torch.no_grad():
-        # 使用tqdm显示进度条
         tbar = tqdm(test_dataloader)
         for i, (inputs, target) in enumerate(tbar):
-            # 将数据移动到指定设备
             data = inputs.to(device, dtype=torch.float32)
             labelt = target.to(device, dtype=torch.float32)
-
-            # 模型前向传播
             output = model(data)
-
-            # 将当前批次的真实值和预测值存入列表
-            # 使用 .cpu() 将数据移回CPU，并使用 .numpy() 转换为NumPy数组
             all_targets.append(labelt.cpu().numpy())
             all_outputs.append(output.cpu().numpy())
 
-    # 将列表中所有的批次数据拼接成一个大的NumPy数组
-    # all_targets 和 all_outputs 的形状将是 (样本总数, 1, 信号长度)
-    all_targets = np.vstack(all_targets)
-    all_outputs = np.vstack(all_outputs)
+    # --- 信号级评估 (MSE, R²) ---
+    print("\n--- 信号级指标 (Signal-level Metrics) ---")
+    all_targets_np = np.vstack(all_targets)
+    all_outputs_np = np.vstack(all_outputs)
+    targets_flat = all_targets_np.flatten()
+    outputs_flat = all_outputs_np.flatten()
 
-    # 展平数组以便于计算指标，形状变为 (样本总数 * 信号长度)
-    targets_flat = all_targets.flatten()
-    outputs_flat = all_outputs.flatten()
-
-    # --- 计算评估指标 ---
     mse = mean_squared_error(targets_flat, outputs_flat)
     rmse = np.sqrt(mse)
     r2 = r2_score(targets_flat, outputs_flat)
 
-    print("\n--- 测试结果 ---")
     print(f"均方误差 (MSE): {mse:.6f}")
     print(f"均方根误差 (RMSE): {rmse:.6f}")
     print(f"决定系数 (R-squared, R²): {r2:.6f}")
-    print("------------------\n")
 
-    # --- 保存预测结果 ---
-    # 创建一个 'results' 文件夹 (如果不存在)
-    if not os.path.exists('results'):
-        os.makedirs('results')
+    # --- 临床级评估 (Clinical-level Metrics) ---
+    print("\n--- 临床级指标 (Clinical-level Metrics) ---")
+    
+    # 步骤 2/4: R波检测
+    # 使用 flatten() 后的1D长信号进行R波检测
+    print("步骤 2/4: 在真实信号和预测信号上检测R波...")
+    true_peaks = robust_detect_r_peaks(targets_flat, sampling_rate=SAMPLING_RATE)
+    pred_peaks = robust_detect_r_peaks(outputs_flat, sampling_rate=SAMPLING_RATE)
+    print(f"检测到 {len(true_peaks)} 个真实R波, {len(pred_peaks)} 个预测R波。")
+    
+    # 步骤 3/4: (可选) 可视化R波检测结果以供调试
+    # 创建 'results/rpeak_debug' 文件夹
+    debug_dir = f'results/{model_name}/rpeak_debug/'
+    os.makedirs(debug_dir, exist_ok=True)
+    plot_rpeaks(
+        targets_flat, 
+        true_peaks, 
+        title=f"R-Peak Detection on Ground Truth ({file_name})",
+        save_path=os.path.join(debug_dir, f"true_{file_name}.png")
+    )
+    plot_rpeaks(
+        outputs_flat,
+        pred_peaks,
+        title=f"R-Peak Detection on Model Prediction ({file_name})",
+        save_path=os.path.join(debug_dir, f"pred_{file_name}.png")
+    )
+    
+    # 步骤 4/4: 计算临床指标
+    print("步骤 4/4: 计算QRS检测性能和胎心率误差...")
+    # QRS 检测性能 (使用20ms容差)
+    qrs_performance = calculate_qrs_performance(true_peaks, pred_peaks, tolerance_ms=20, sampling_rate=SAMPLING_RATE)
+    
+    # FHR 误差 (使用100ms容差)
+    fhr_mae = calculate_fhr_error(true_peaks, pred_peaks, sampling_rate=SAMPLING_RATE, tolerance_ms=100)
 
-    # 定义保存文件的路径
-    # file_index 用于标识当前测试的是哪个文件的数据
-    file_index = dataset.select_index
-    file_name = test_dataloader.dataset.fileNames[file_index]
-    save_path_target = os.path.join('results', f'target_{file_name}.npy')
-    save_path_output = os.path.join('results', f'output_{file_name}.npy')
+    print("\n--- ✅ 最终评估结果 ---")
+    print(f"QRS检测 - F1分数: {qrs_performance['f1_score']:.4f}")
+    print(f"QRS检测 - 灵敏度(Se): {qrs_performance['sensitivity']:.4f}")
+    print(f"QRS检测 - 阳性预测率(P+): {qrs_performance['precision']:.4f}")
+    print(f"QRS检测 - TP/FP/FN: {qrs_performance['TP']}/{qrs_performance['FP']}/{qrs_performance['FN']}")
+    print(f"胎心率误差 (FHR MAE): {fhr_mae:.4f} BPM (搏/分钟)")
+    print("------------------------\n")
 
-    # 保存真实信号和模型输出信号
-    np.save(save_path_target, all_targets)
-    np.save(save_path_output, all_outputs)
-    print(f"测试结果已保存至 'results' 文件夹:")
-    print(f" - 真实信号: {save_path_target}")
-    print(f" - 模型预测信号: {save_path_output}")
+    # 保存原始信号的功能仍然保留
+    results_dir = f'results/{model_name}'
+    np.save(os.path.join(results_dir, f'target_{file_name}.npy'), all_targets_np)
+    np.save(os.path.join(results_dir, f'output_{file_name}.npy'), all_outputs_np)
+    print(f"原始信号已保存至 '{results_dir}' 文件夹。")
 
 
 def main():
@@ -130,16 +146,15 @@ def main():
     # 核心步骤: 在实例化数据集之前，设置要加载的文件索引
     dataset.select_index = args.test_file_index
     
-    # 实例化测试数据集
     test_dataset = dataset.FECGDataset(data_path=config.test_dir, train=False)
-    # 创建DataLoader
     test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, num_workers=0, shuffle=False)
-    
-    selected_file = test_dataset.fileNames[dataset.select_index]
-    print(f"已选择测试文件: {selected_file}")
+    selected_file_name = test_dataset.fileNames[dataset.select_index]
+    print(f"已选择测试文件: {selected_file_name}")
 
     # --- 运行测试 ---
-    test(model, test_dataloader)
+    # 【修改】调用更新后的test函数
+    test(model, test_dataloader, config.model_name, selected_file_name.replace('.edf',''))
+
 
 
 if __name__ == '__main__':

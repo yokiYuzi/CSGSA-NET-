@@ -1,10 +1,5 @@
 # main.py (修改后)
 
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jul 22 15:13:32 2021
-@author: wangxu
-"""
 
 import torch, time, os, shutil
 import models, utils
@@ -19,6 +14,8 @@ from torch.optim import lr_scheduler
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 import argparse
+from clinical_evaluator import robust_detect_r_peaks, calculate_qrs_performance, calculate_fhr_error
+SAMPLING_RATE = 200
 
 # 【新增】导入计算 R² 和 MSE 的库
 from sklearn.metrics import r2_score, mean_squared_error
@@ -84,11 +81,11 @@ def val_epoch(model, optimizer, criterion, scheduler, val_dataloader, show_inter
     return total
 
 # 【新增】独立的测试函数
-def test_epoch(model, test_dataloader, model_name, criterion):
+def test_epoch(model, test_dataloader, model_name):
     """
-    在独立的测试集上评估最终模型的性能
+    在独立的测试集上评估最终模型的性能（包含信号级和临床级指标）
     """
-    model.eval() # 设置为评估模式
+    model.eval()
     all_targets = []
     all_outputs = []
     
@@ -97,40 +94,42 @@ def test_epoch(model, test_dataloader, model_name, criterion):
     print(f"测试数据文件: r10.edf")
     print("="*20)
 
-    with torch.no_grad(): # 在测试时不需要计算梯度
+    with torch.no_grad():
         tbar = tqdm(test_dataloader)
         for i, (inputs, target) in enumerate(tbar):
             data = inputs.to(device, dtype=torch.float32)
             labelt = target.to(device, dtype=torch.float32)
-            
             output = model(data)
-
-            # 收集所有真实值和预测值，用于后续计算指标
             all_targets.append(labelt.cpu().numpy())
             all_outputs.append(output.cpu().numpy())
 
-    # 将所有批次的数据拼接成一个大数组
-    all_targets = np.vstack(all_targets).flatten()
-    all_outputs = np.vstack(all_outputs).flatten()
-
     # --- 计算并打印最终的评估指标 ---
-    mse = mean_squared_error(all_targets, all_outputs)
+    # 拼接成一个大数组
+    all_targets_np = np.vstack(all_targets)
+    all_outputs_np = np.vstack(all_outputs)
+    targets_flat = all_targets_np.flatten()
+    outputs_flat = all_outputs_np.flatten()
+
+    # 信号级指标
+    mse = mean_squared_error(targets_flat, outputs_flat)
     rmse = np.sqrt(mse)
-    r2 = r2_score(all_targets, all_outputs)
+    r2 = r2_score(targets_flat, outputs_flat)
+
+    # 临床级指标
+    true_peaks = robust_detect_r_peaks(targets_flat, sampling_rate=SAMPLING_RATE)
+    pred_peaks = robust_detect_r_peaks(outputs_flat, sampling_rate=SAMPLING_RATE)
+    qrs_performance = calculate_qrs_performance(true_peaks, pred_peaks, tolerance_ms=20, sampling_rate=SAMPLING_RATE)
+    fhr_mae = calculate_fhr_error(true_peaks, pred_peaks, sampling_rate=SAMPLING_RATE, tolerance_ms=100)
 
     print("\n--- ✅ 最终测试结果 ---")
+    print("--- 信号级指标 ---")
     print(f"均方误差 (MSE): {mse:.6f}")
     print(f"均方根误差 (RMSE): {rmse:.6f}")
-    print(f"决定系数 (R-squared, R²): {r2:.6f}")
+    print(f"决定系数 (R²): {r2:.6f}")
+    print("\n--- 临床级指标 ---")
+    print(f"QRS F1-Score: {qrs_performance['f1_score']:.4f} (Se={qrs_performance['sensitivity']:.4f}, P+={qrs_performance['precision']:.4f})")
+    print(f"胎心率误差 (FHR MAE): {fhr_mae:.4f} BPM")
     print("------------------------\n")
-    
-    # (可选) 保存结果用于可视化分析
-    results_dir = f'results/{model_name}'
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
-    np.save(os.path.join(results_dir, 'test_targets.npy'), all_targets)
-    np.save(os.path.join(results_dir, 'test_outputs.npy'), all_outputs)
-    print(f"测试集预测结果已保存至 {results_dir} 文件夹。")
 
 
 def weights_init_normal(m):
@@ -210,13 +209,14 @@ def train(args):
 
     # --- 【新增】训练后自动开始测试 ---
     # 加载训练过程中保存的最佳模型
+    # --- 【新增】训练后自动开始测试 ---
     best_w_path = os.path.join(model_save_dir, config.best_w)
     if os.path.exists(best_w_path):
         print(f"\n加载性能最佳的模型 '{config.best_w}' 用于最终测试...")
         best_model_state = torch.load(best_w_path, map_location=device)
         model.load_state_dict(best_model_state['state_dict'])
-        # 调用测试函数
-        test_epoch(model, test_dataloader, config.model_name, criterion)
+        # 【修改】调用更新后的测试函数
+        test_epoch(model, test_dataloader, config.model_name)
     else:
         print("未找到最佳模型文件，跳过测试。")
 
