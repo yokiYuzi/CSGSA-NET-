@@ -95,13 +95,35 @@ def test(model, test_dataloader, model_name, file_name):
     # FHR 误差 (使用100ms容差)
     fhr_mae = calculate_fhr_error(true_peaks, pred_peaks, sampling_rate=SAMPLING_RATE, tolerance_ms=100)
 
-    print("\n--- ✅ 最终评估结果 ---")
-    print(f"QRS检测 - F1分数: {qrs_performance['f1_score']:.4f}")
-    print(f"QRS检测 - 灵敏度(Se): {qrs_performance['sensitivity']:.4f}")
-    print(f"QRS检测 - 阳性预测率(P+): {qrs_performance['precision']:.4f}")
-    print(f"QRS检测 - TP/FP/FN: {qrs_performance['TP']}/{qrs_performance['FP']}/{qrs_performance['FN']}")
-    print(f"胎心率误差 (FHR MAE): {fhr_mae:.4f} BPM (搏/分钟)")
-    print("------------------------\n")
+     # --- 【新增】以更详细的表格格式打印最终评估结果 ---
+    print("\n--- ✅ 最终临床评估详细报告 ---")
+    print("-" * 60)
+    print(f"{'Metric':<35} | {'Value'}")
+    print("-" * 60)
+    
+    # R波检测统计
+    print(f"{'Actual R Waves (Ground Truth)':<35} | {len(true_peaks)}")
+    print(f"{'Predicted R Waves (Model Output)':<35} | {len(pred_peaks)}")
+    print("-" * 60)
+    
+    # QRS 检测性能分解
+    print(f"{'True Positives (TP)':<35} | {qrs_performance['TP']}")
+    print(f"{'False Positives (FP)':<35} | {qrs_performance['FP']}")
+    print(f"{'False Negatives (FN)':<35} | {qrs_performance['FN']}")
+    print("-" * 60)
+    
+    # 最终性能指标
+    # 注意：我们在这里也打印了Se和P+，因为它们对于理解F1分数很有帮助
+    print(f"{'Sensitivity (Se)':<35} | {qrs_performance['sensitivity']:.4f}")
+    print(f"{'Precision (P+)':<35} | {qrs_performance['precision']:.4f}")
+    print(f"{'F1 Score':<35} | {qrs_performance['f1_score']:.4f}")
+    print("-" * 60)
+    
+    # 胎心率误差
+    print(f"{'Fetal Heart Rate MAE (BPM)':<35} | {fhr_mae:.4f}")
+    print("-" * 60)
+    print("\n")
+
 
     # 保存原始信号的功能仍然保留
     results_dir = f'results/{model_name}'

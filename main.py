@@ -126,10 +126,30 @@ def test_epoch(model, test_dataloader, model_name):
     print(f"均方误差 (MSE): {mse:.6f}")
     print(f"均方根误差 (RMSE): {rmse:.6f}")
     print(f"决定系数 (R²): {r2:.6f}")
-    print("\n--- 临床级指标 ---")
-    print(f"QRS F1-Score: {qrs_performance['f1_score']:.4f} (Se={qrs_performance['sensitivity']:.4f}, P+={qrs_performance['precision']:.4f})")
-    print(f"胎心率误差 (FHR MAE): {fhr_mae:.4f} BPM")
-    print("------------------------\n")
+
+    # --- 【新增】以更详细的表格格式打印临床评估结果 ---
+    print("\n--- 临床级指标详细报告 ---")
+    print("-" * 60)
+    print(f"{'Metric':<35} | {'Value'}")
+    print("-" * 60)
+    
+    # R波检测统计
+    print(f"{'Actual R Waves (Ground Truth)':<35} | {len(true_peaks)}")
+    print(f"{'Predicted R Waves (Model Output)':<35} | {len(pred_peaks)}")
+    print("-" * 60)
+    
+    # QRS 检测性能分解
+    print(f"{'True Positives (TP)':<35} | {qrs_performance['TP']}")
+    print(f"{'False Positives (FP)':<35} | {qrs_performance['FP']}")
+    print(f"{'False Negatives (FN)':<35} | {qrs_performance['FN']}")
+    print("-" * 60)
+    
+    # 最终性能指标
+    print(f"{'F1 Score':<35} | {qrs_performance['f1_score']:.4f}")
+    print(f"{'Fetal Heart Rate MAE (BPM)':<35} | {fhr_mae:.4f}")
+    print("-" * 60)
+    print("\n")
+
 
 
 def weights_init_normal(m):
