@@ -57,7 +57,7 @@ def get_filelist(path):
     
     return Filelist_final
 
-def windowingSig(sig1, sig2, windowSize=300):
+def windowingSig(sig1, sig2, windowSize=128):
         signalLen = sig2.shape[1]
         signalsWindow1 = [sig1[:, int(i):int(i + windowSize)] for i in range(0, signalLen - windowSize +1, windowSize)]
         signalsWindow2 = [sig2[:, int(i):int(i + windowSize)] for i in range(0, signalLen - windowSize +1, windowSize)]
@@ -124,7 +124,7 @@ class FECGDataset(Dataset):
                 fecgAll = np.append(fecgAll, fecgDelayed, axis=1)
 
         # 分窗逻辑保持不变
-        ecgWindows, fecgWindows = windowingSig(ecgAll, fecgAll, windowSize=300)
+        ecgWindows, fecgWindows = windowingSig(ecgAll, fecgAll, windowSize=128)
         return ecgWindows, fecgWindows
 
     # trainTestSplit 等其他辅助函数保持不变

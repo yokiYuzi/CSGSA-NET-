@@ -159,7 +159,7 @@ def weights_init_normal(m):
         nn.init.xavier_uniform_(m.weight.data, gain=tanh_gain)
 
 def train(args):
-    model = getattr(models, config.model_name)(output_size=300)
+    model = getattr(models, config.model_name)(output_size=128)
     args.ckpt = None
     if args.ckpt and not args.resume:
         state = torch.load(args.ckpt, map_location='cpu')

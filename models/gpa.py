@@ -157,7 +157,7 @@ class GCN_SSA_Block(nn.Module):
         self.key_conv = nn.Conv1d(in_dim, in_dim, kernel_size=1)
         self.value_conv = nn.Conv1d(in_dim, in_dim, kernel_size=1)
         self.softmax = nn.Softmax(dim=-1)
-        self.feature_len = 300
+        self.feature_len = 128
         self.gcn_query = GCN(nfeat=self.feature_len, nhid=8, nclass=self.feature_len,  dropout=0)
         self.gcn_key = GCN(nfeat=self.feature_len, nhid=8, nclass=self.feature_len,  dropout=0)
         self.gcn_value = GCN(nfeat=self.feature_len, nhid=8, nclass=self.feature_len,  dropout=0)
@@ -312,7 +312,7 @@ class GCN_Sparse_Att_Block(nn.Module):
 
 
 class FECGNet(nn.Module):  
-    def __init__(self, input_size=1, output_size=300):
+    def __init__(self, input_size=1, output_size=128):
         super().__init__()
         self.attention = GCN_Sparse_Att_Block(64)
 
@@ -414,7 +414,7 @@ def fecg(output_size=1000):
 
 
 def main():
-    x = torch.rand([1,300])
+    x = torch.rand([1,128])
     model = FECGNet()
     print(model(x))
 
